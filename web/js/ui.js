@@ -37,6 +37,7 @@ var ICONS = {
   pencil: '<path d="M4 20h4L19 9l-4-4L4 16z"/>',
   bolt: '<path d="M13 3L5 14h6l-1 7 8-11h-6z"/>',
   image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/>',
+  map: '<path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z"/><path d="M9 4v14M15 6v14"/>',
   keys: '<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/>'
 };
 function icon(name) {

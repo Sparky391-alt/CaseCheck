@@ -617,14 +617,18 @@ async function finishImport() {
 function projectScreen(r) {
   var p = P.project, c = counts(P.items);
   var tab = r.tab || 'scan';
-  var tabs = [['scan', 'Scan', 'scan'], ['list', 'List', 'list'], ['zones', 'Zones', 'zones'], ['menu', 'More', 'menu']];
   var content = tab === 'scan' ? scanView() : tab === 'list' ? listView() : tab === 'zones' ? zonesView() : menuView();
+  function tb(key, label, ic) {
+    return h('button', { 'aria-current': String(key === tab), onclick: function () { if (key !== tab) replaceScreen({ s: 'project', tab: key }); } }, icon(ic), label);
+  }
   return h('div', { class: 'screen' },
     topbar(p.name, subText(c), function () { popScreen(); }),
     content,
-    h('nav', { class: 'tabs', 'aria-label': 'Project' }, tabs.map(function (t) {
-      return h('button', { 'aria-current': String(t[0] === tab), onclick: function () { if (t[0] !== tab) replaceScreen({ s: 'project', tab: t[0] }); } }, icon(t[2]), t[1]);
-    })));
+    h('nav', { class: 'tabs', 'aria-label': 'Project' },
+      tb('list', 'List', 'list'), tb('zones', 'Zones', 'zones'),
+      h('button', { class: 'bigscan', 'aria-label': 'Scan', 'aria-current': String(tab === 'scan'), onclick: function () { if (tab !== 'scan') replaceScreen({ s: 'project', tab: 'scan' }); } }, h('span', { class: 'disc' }, icon('scan')), h('span', { class: 'lbl' }, 'Scan')),
+      h('button', { onclick: function () { openPlan({}); } }, icon('map'), 'Plan'),
+      tb('menu', 'More', 'menu')));
 }
 function subText(c) { return (c.in + c.out) + ' of ' + c.total + ' arrived' + (c.out ? ' · ' + c.out + ' out' : '') + (P && P.project ? Sync.label(P.project) : ''); }
 function refreshView() {
@@ -638,11 +642,14 @@ function refreshView() {
 
 /* ===================== scan ===================== */
 function mbtn(mode, label) {
-  var b = h('button', { 'aria-pressed': String(P.project.mode === mode), onclick: function () { setMode(mode); } }, label);
+  var b = h('button', { 'aria-pressed': String(mode === 'inside' ? !!P.project.scanInside : (!P.project.scanInside && P.project.mode === mode)), onclick: function () { setMode(mode); } }, label);
   S.modeBtns[mode] = b;
   return b;
 }
 function setMode(mode) {
+  var wasIn = !!P.project.scanInside;
+  P.project.scanInside = mode === 'inside';
+  if (wasIn !== P.project.scanInside) Store.putProject(P.project);
   if (mode === 'inside') {
     S.inside = true;
     S.hint.textContent = 'Scan the flight case to check inside it';
@@ -653,8 +660,28 @@ function setMode(mode) {
   var cur = S.inside ? 'inside' : P.project.mode;
   Object.keys(S.modeBtns).forEach(function (k) { S.modeBtns[k].setAttribute('aria-pressed', String(k === cur)); });
 }
+function recentScans() {
+  var ev = [];
+  P.items.forEach(function (i) {
+    if (i.status === 'in' && i.inAt) ev.push({ it: i, t: i.inAt, k: 'In' });
+    else if (i.status === 'out' && i.outAt) ev.push({ it: i, t: i.outAt, k: 'Out' });
+  });
+  ev.sort(function (x, y) { return y.t - x.t; });
+  return ev.slice(0, 3);
+}
+function refreshRecent() {
+  if (!S || !S.recent) return;
+  var ev = recentScans();
+  S.recent.hidden = !ev.length;
+  S.recent.replaceChildren.apply(S.recent, ev.map(function (e) {
+    var z = zoneInfo(e.it.zone);
+    return h('button', { class: 'rec', 'aria-label': 'Fix ' + nm(e.it), onclick: function () { itemSheet(e.it); } },
+      h('i', { style: { background: z.color } }), h('b', null, nm(e.it)), h('span', null, e.k + ' ' + fmtT(e.t)));
+  }));
+}
 function refreshStats() {
   if (!S || !S.stats) return;
+  refreshRecent();
   var c = counts(P.items);
   S.stats.replaceChildren(
     h('span', null, h('b', null, c.wait), ' waiting'), h('span', null, h('b', null, c.in), ' in'), h('span', null, h('b', null, c.out), ' out'));
@@ -663,7 +690,7 @@ function refreshStats() {
 function scanView() {
   S = { mounted: false, busy: false, auto: false, timer: null, modeBtns: {}, ocrReady: false };
   S.video = h('video', { playsinline: true, muted: true, autoplay: true });
-  S.hint = h('div', { class: 'hint' }, 'Fit the serial number inside the frame');
+  S.hint = h('div', { class: 'hint' }, P.project.scanInside ? 'Scan the flight case to check inside it' : 'Fit the serial number inside the frame');
   S.msg = h('div', { class: 'msg', hidden: true });
   S.busyEl = h('div', { class: 'busy', hidden: true }, h('div', { class: 'spin' }), h('div', null, 'Reading'));
   S.shutter = h('button', { class: 'shutter', 'aria-label': 'Take photo', onclick: function () { takePhoto(false); } });
@@ -672,6 +699,7 @@ function scanView() {
   S.fileIn = h('input', { type: 'file', accept: 'image/*', hidden: true, onchange: onPickPhoto });
   var ctrl = h('div', { class: 'ctrl' }, h('div', { class: 'side' }, S.torchBtn), S.shutter, h('div', { class: 'side r' }, S.autoBtn));
   var cam = h('div', { class: 'cam' }, S.video, h('div', { class: 'reticle' }, h('i')), S.hint, ctrl, S.msg, S.busyEl);
+  S.inside = !!P.project.scanInside;
   var seg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Mode' }, mbtn('in', 'Check in'), mbtn('out', 'Check out'), mbtn('inside', 'Inside'));
   S.stats = h('div', { class: 'stats' });
   var strip = h('div', { class: 'strip2' }, S.stats,
@@ -680,7 +708,9 @@ function scanView() {
       h('button', { class: 'btn small', onclick: function () { noLabelSheet(); } }, icon('scan'), 'No label'),
       h('button', { class: 'btn small', onclick: function () { findSheet({}); } }, icon('keys'), 'Type')));
   refreshStats();
-  return h('div', { class: 'scanwrap' }, seg, cam, strip, S.fileIn);
+  S.recent = h('div', { class: 'recent', 'aria-label': 'Last scans' });
+  refreshRecent();
+  return h('div', { class: 'scanwrap' }, seg, cam, S.recent, strip, S.fileIn);
 }
 
 function showCamMsg(title, text, actions) {
@@ -906,11 +936,13 @@ function addUnlistedSheet(parentSheet, serial, opts) {
   var gp = h('input', { type: 'text', placeholder: 'Client or department' });
   var zs = h('select', null, zones.map(function (z) { return h('option', { value: z }, z); }).concat([h('option', { value: '__new' }, 'New zone')]));
   var zn = h('input', { type: 'text', placeholder: 'New zone name', hidden: true });
+  if (P.project.lastZone && zones.indexOf(P.project.lastZone) >= 0) zs.value = P.project.lastZone;
   zs.addEventListener('change', function () { zn.hidden = zs.value !== '__new'; });
   var s2;
   var save = h('button', { class: 'btn primary block', onclick: async function () {
     var serialV = sn.value.trim(); if (!serialV) { toast('Enter a serial number'); return; }
     var zone = zs.value === '__new' ? zn.value.trim() : zs.value;
+    if (zone) { P.project.lastZone = zone; Store.putProject(P.project); }
     var it = { id: Store.uid(), pid: P.project.id, serial: serialV, alt: '', desc: ds.value.trim(), group: gp.value.trim(), zone: zone || 'Unassigned',
                status: 'wait', inAt: null, outAt: null, note: 'Not on the original list', unlisted: true, ord: P.items.length ? P.items[P.items.length - 1].ord + 1 : 0, raw: [] };
     P.items.push(it); reindex(); zoneInfo(it.zone);
@@ -954,7 +986,9 @@ function listView() {
       var low = q.toLowerCase(), key = Match.norm(q);
       a = a.filter(function (i) {
         return (key && (Match.norm(i.serial).indexOf(key) !== -1 || Match.norm(i.alt).indexOf(key) !== -1)) ||
-          (i.desc || '').toLowerCase().indexOf(low) !== -1 || (i.group || '').toLowerCase().indexOf(low) !== -1;
+          (i.desc || '').toLowerCase().indexOf(low) !== -1 || (i.group || '').toLowerCase().indexOf(low) !== -1 ||
+          (i.zone || '').toLowerCase().indexOf(low) !== -1 ||
+          (i.raw || []).some(function (r) { return String(r[1]).toLowerCase().indexOf(low) !== -1; });
       });
     }
     if (ui.filter === 'in') a = a.slice().sort(function (x, y) { return (y.inAt || 0) - (x.inAt || 0); });
@@ -969,7 +1003,7 @@ function listView() {
     if (!a.length) box.appendChild(h('div', { class: 'empty' }, h('p', { style: { margin: 0 } }, 'Nothing here yet.')));
   }
   P.redraw = draw;
-  var q = h('input', { type: 'search', placeholder: 'Search serial, description or group', value: ui.q, 'aria-label': 'Search' });
+  var q = h('input', { type: 'search', placeholder: 'Search name, code, case or pallet', value: ui.q, 'aria-label': 'Search' });
   q.addEventListener('input', function () { ui.q = q.value; ui.limit = 100; draw(); });
   var chipsEl = h('div', { class: 'chips' });
   function drawChips() {
@@ -984,7 +1018,7 @@ function listView() {
   var origRedraw = draw;
   P.redraw = function () { drawChips(); origRedraw(); };
   drawChips(); draw();
-  return h('div', { class: 'scroll' }, q, chipsEl, count, box, more);
+  return h('div', { class: 'scroll' }, h('div', { class: 'listhead' }, q, chipsEl), count, box, more);
 }
 
 /* item detail */
@@ -1076,8 +1110,9 @@ function pickDropSheet(it, done) {
 }
 function pickZoneSheet(it, done) {
   var s;
-  var rows = P.project.zones.map(function (z) {
-    return h('button', { class: 'item', style: { gridTemplateColumns: '8px 1fr' }, onclick: async function () { it.zone = z.name; await saveItem(it); closeOv(s.el); refreshView(); done(); } },
+  var zl = P.project.zones.slice().sort(function (x, y) { return (y.name === P.project.lastZone) - (x.name === P.project.lastZone); });
+  var rows = zl.map(function (z) {
+    return h('button', { class: 'item', style: { gridTemplateColumns: '8px 1fr' }, onclick: async function () { it.zone = z.name; P.project.lastZone = z.name; Store.putProject(P.project); await saveItem(it); closeOv(s.el); refreshView(); done(); } },
       h('div', { class: 'strip', style: { background: z.color } }), h('div', { class: 'sn', style: { fontFamily: 'var(--display)', fontSize: '22px', textTransform: 'uppercase' } }, z.name));
   });
   s = sheet('Change zone', [h('div', { class: 'items' }, rows)]);
