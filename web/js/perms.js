@@ -110,7 +110,8 @@ var Perms = (function () {
       var me = Store.who() || '';
       if (!rows || !rows.length) {
         var pol = p.pol || {}, own = p.team.owner === true, role = own ? 'full' : (pol.role || 'full');
-        var body = { team: code, id: id, name: me, role: role, perms: permsOf(role), zones: [], status: own ? 'active' : (pol.approve ? 'pending' : 'active'), last_seen: now, info: await infoNow(), created_at: now };
+        var startPerms = !own && pol.perms ? Object.assign(permsOf(role), pol.perms) : permsOf(role);
+        var body = { team: code, id: id, name: me, role: role, perms: startPerms, zones: [], status: own ? 'active' : (pol.approve ? 'pending' : 'active'), last_seen: now, info: await infoNow(), created_at: now };
         await api(code, 'cc_devices?on_conflict=team,id', { method: 'POST', prefer: 'resolution=ignore-duplicates,return=minimal', body: body });
         st.row = { code: code, role: role, perms: body.perms, zones: [], status: body.status }; save(code, st.row); st.lastPresence = now;
       } else {
@@ -176,9 +177,20 @@ function phonesSheet() {
     devs.sort(function (a, b) { return (rank[a.status] || 1) - (rank[b.status] || 1) || (b.last_seen || 0) - (a.last_seen || 0); });
     var pol = p.pol || { approve: false, role: 'full' };
     var ap = h('select', null, h('option', { value: 'no', selected: !pol.approve ? true : null }, 'New phones get in straight away'), h('option', { value: 'yes', selected: pol.approve ? true : null }, 'New phones wait for approval'));
-    var ro = h('select', null, Object.keys(Perms.PRESETS).map(function (k) { return h('option', { value: k, selected: (pol.role || 'full') === k ? true : null }, 'Start with ' + Perms.PRESETS[k].label); }));
-    function savePol() { p.pol = { approve: ap.value === 'yes', role: ro.value }; Store.putProject(p); toast('Saved for new phones'); }
-    ap.addEventListener('change', savePol); ro.addEventListener('change', savePol);
+    var pRole = pol.role || 'full', pPerms = Object.assign(Perms.permsOf(pRole), pol.perms || {}), ro = h('div', { class: 'chips', style: { flexWrap: 'wrap' } }), rp = h('div', { class: 'chips', style: { flexWrap: 'wrap' } });
+    function savePol() { p.pol = { approve: ap.value === 'yes', role: pRole, perms: pPerms }; Store.putProject(p); toast('Saved for new phones'); }
+    function paintPol() {
+      ro.replaceChildren.apply(ro, Object.keys(Perms.PRESETS).map(function (k) { return h('button', { class: 'chip', 'aria-pressed': String(pRole === k), onclick: function () { pRole = k; pPerms = Perms.permsOf(k); paintPol(); savePol(); } }, Perms.PRESETS[k].label); }));
+      rp.replaceChildren.apply(rp, Perms.LIST.map(function (x) {
+        return h('button', { class: 'chip', 'aria-pressed': String(!!pPerms[x[0]]), onclick: function () {
+          pPerms[x[0]] = !pPerms[x[0]];
+          var m = Object.keys(Perms.PRESETS).filter(function (k) { return Perms.LIST.every(function (y) { return (Perms.PRESETS[k].on.indexOf(y[0]) >= 0) === !!pPerms[y[0]]; }); })[0];
+          pRole = m || 'custom'; paintPol(); savePol();
+        } }, x[1]);
+      }));
+    }
+    paintPol();
+    ap.addEventListener('change', savePol);
     var list = devs.map(function (d) {
       var you = d.id === me;
       return h('button', { class: 'item', onclick: function () { editPhone(d); } },
@@ -188,7 +200,7 @@ function phonesSheet() {
           h('div', { class: 'ds' }, (d.zones && d.zones.length ? 'Zones: ' + d.zones.join(', ') : 'All zones') + ' · ' + (online(d) || you ? 'Online now' : d.last_seen ? 'Seen ' + fmtT(d.last_seen) : 'Never seen'))),
         h('div', { class: 'rt' }, h('span', { class: 'badge' }, isOwnerRow(d) ? 'Owner' : roleLabel(d))));
     });
-    root.replaceChildren(h('div', { class: 'field' }, ap), h('div', { class: 'field' }, ro), h('div', { class: 'label' }, devs.length + ' phones. Tap one to change it.'), h('div', { class: 'items' }, list),
+    root.replaceChildren(h('div', { class: 'field' }, ap), h('div', { class: 'label' }, 'New phones start with'), ro, rp, h('div', { class: 'label' }, devs.length + ' phones. Tap one to change it.'), h('div', { class: 'items' }, list),
       h('button', { class: 'btn small', onclick: load }, 'Refresh'));
   }
   function editPhone(d) {
