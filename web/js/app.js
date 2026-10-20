@@ -1150,7 +1150,7 @@ function buildCSV() {
 }
 function menuView() {
   var p = P.project;
-  var MENU_PERM = { 'Share report (CSV)': 'report', 'Add another document': 'manage', 'Rename project': 'manage', 'Save a backup': 'manage', 'Reset all check ins': 'manage', 'Delete project': 'manage' };
+  var MENU_PERM = { 'Share report (CSV)': 'report', 'Add another document': 'manage', 'Rename project': 'manage', 'Save a backup': 'manage', 'Reset all check ins': 'wipe', 'Delete project': 'wipe' };
   var b = function (label, fn, cls) { var pm = MENU_PERM[label]; return h('button', { class: 'btn ' + (cls || ''), onclick: pm ? function () { if (Perms.ok(pm)) fn(); } : fn }, label); };
   return h('div', { class: 'scroll' },
     h('div', { class: 'menu' },
@@ -1165,15 +1165,15 @@ function menuView() {
       b('Theme: ' + themeName(), cycleTheme),
       b('Check for updates', checkUpdates),
       b('Save a backup', function () { shareText(p.name + ' backup.json', JSON.stringify({ app: 'casecheck', project: p, items: P.items })); }),
-      b('Reset all check ins', async function () {
+      Perms.can('wipe') ? b('Reset all check ins', async function () {
         if (!(await confirmDlg({ title: 'Reset everything?', body: 'Every item goes back to Waiting. Photos stay.', ok: 'Reset', danger: true }))) return;
         P.items.forEach(function (i) { i.status = 'wait'; i.inAt = null; i.outAt = null; i.got = 0; i.gone = 0; });
         await Store.putItems(P.items); refreshView(); toast('All items are waiting again');
-      }, 'danger'),
-      b('Delete project', async function () {
+      }, 'danger') : null,
+      Perms.can('wipe') ? b('Delete project', async function () {
         if (!(await confirmDlg({ title: 'Delete "' + p.name + '"?', body: 'The list, check ins and photos are removed from this phone.', ok: 'Delete', danger: true }))) return;
         if (p.plan) await planClear(); await Store.deleteProject(p.id); P = null; Nav.stack = [{ t: 'screen', route: { s: 'home' } }]; render();
-      }, 'danger')),
+      }, 'danger') : null),
     h('div', { class: 'ver' }, verLine()), h('div', { class: 'ver credit' }, 'Created and operated by M Barnard'));
 }
 /* ===================== report ===================== */

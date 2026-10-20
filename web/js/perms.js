@@ -5,10 +5,11 @@ var Perms = (function () {
   var LIST = [
     ['checkin', 'Check items in'], ['checkout', 'Check items out'], ['count', 'Count pieces'],
     ['edit', 'Edit items and add items'], ['inside', 'Inside checks'], ['damage', 'Damage photos'],
-    ['plan', 'Edit the site plan'], ['report', 'Reports and exports'], ['manage', 'Project settings']
+    ['plan', 'Edit the site plan'], ['report', 'Reports and exports'], ['manage', 'Project settings'],
+    ['wipe', 'Reset check ins and delete project']
   ];
   var PRESETS = {
-    full: { label: 'Full access', on: ['checkin', 'checkout', 'count', 'edit', 'inside', 'damage', 'plan', 'report', 'manage'] },
+    full: { label: 'Full access', on: ['checkin', 'checkout', 'count', 'edit', 'inside', 'damage', 'plan', 'report', 'manage', 'wipe'] },
     receiving: { label: 'Receiving', on: ['checkin', 'count', 'damage', 'inside'] },
     dispatch: { label: 'Dispatch', on: ['checkout', 'count', 'damage'] },
     inside: { label: 'Inside checks', on: ['inside', 'damage'] },
@@ -49,6 +50,7 @@ var Perms = (function () {
     if (s !== 'active') return false;
     var r = row();
     if (!r) return true;
+    if (perm === 'wipe' && r.perms && r.perms.wipe === undefined) return r.role === 'full';
     if (!r.perms || !r.perms[perm]) return false;
     if (item && r.zones && r.zones.length && item.zone && r.zones.indexOf(item.zone) < 0) return false;
     return true;
@@ -136,7 +138,7 @@ var Perms = (function () {
 
   /* The lock screen for blocked phones and the banner for phones waiting for approval. */
   function render() {
-    var adm = isAdmin();
+    var adm = isAdmin() + ':' + can('wipe') + ':' + can('manage') + ':' + can('report');
     if (st.admin !== adm) { st.admin = adm; try { if (window.curScreen && curScreen().route.tab === 'menu') window.render(); } catch (e) { /* ignore */ } }
     var s = status(), el = document.getElementById('permlock');
     if (s === 'blocked') {
