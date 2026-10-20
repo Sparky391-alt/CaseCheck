@@ -78,7 +78,7 @@
         if (kn.length >= 3) entries.push({ item: it, kn: kn, kc: canon(kn), field: p[0] });
       });
     });
-    return { entries: entries };
+    return { entries: entries, items: items };
   }
 
   // Score every item against the tokens. Highest score per item wins.
@@ -105,6 +105,60 @@
     var list = Object.keys(best).map(function (k) { return best[k]; });
     list.sort(function (a, b) { return b.score - a.score; });
     return list;
+  }
+
+
+  // Words of a name, split between letters and digits so INTERCOM2 and INTERCOM 2 look the same.
+  function words(s) {
+    return (String(s == null ? '' : s).toUpperCase().match(/[A-Z]+|[0-9]+/g) || []);
+  }
+  function primaryWords(it) {
+    var w = words(it.serial).concat(words(it.alt));
+    if (!w.length) w = words(String(it.desc || '').split(/[;:]/)[0]);
+    return w;
+  }
+  // Read all the words in the text and score every item by how many of its own name words are there.
+  // Never sure. These only fill the list of possible matches, so a person always confirms.
+  function textMatches(items, text) {
+    var tw = words(text), have = {}, i, k;
+    tw.forEach(function (w) { have[w] = 1; });
+    if (tw.length < 2) return [];
+    var df = {}, prim = [];
+    items.forEach(function (it) {
+      var p = primaryWords(it), seen = {};
+      p.forEach(function (w) { if (!seen[w]) { seen[w] = 1; df[w] = (df[w] || 0) + 1; } });
+      prim.push(p);
+    });
+    var N = Math.max(2, items.length), out = [];
+    function present(w) {
+      if (have[w]) return w;
+      if (w.length >= 5) for (var j = 0; j < tw.length; j++) if (Math.abs(tw[j].length - w.length) <= 1 && tw[j].length >= 5 && editDistance(tw[j], w, 1) <= 1) return tw[j];
+      return null;
+    }
+    for (i = 0; i < items.length; i++) {
+      var p = prim[i]; if (!p.length) continue;
+      var total = 0, got = 0, letters = 0, hit = [];
+      for (k = 0; k < p.length; k++) {
+        var w = p[k], wt = /^[0-9]+$/.test(w) ? 1.2 : Math.max(1, Math.log(N / (df[w] || 1)));
+        total += wt;
+        var f = present(w);
+        if (f) { got += wt; hit.push(w); if (/[A-Z]/.test(w)) letters++; }
+      }
+      if (!letters || !total) continue;
+      var frac = got / total;
+      if (frac >= 0.6) out.push({ item: items[i], score: Math.round(50 + 38 * frac), how: 'words', token: hit.join(' ') });
+    }
+    out.sort(function (a, b) { return b.score - a.score; });
+    return out.slice(0, 8);
+  }
+  // Exact reads first, then the word matches that were not already found.
+  function findAll(index, text) {
+    var m = findMatches(index, tokensFromText(text));
+    if (m.length && m[0].score >= 96 && (m.length === 1 || m[1].score < m[0].score - 8)) return m;
+    var seen = {}; m.forEach(function (x) { seen[x.item.id] = 1; });
+    var extra = textMatches(index.items || [], text).filter(function (x) { return !seen[x.item.id]; });
+    var all = m.concat(extra); all.sort(function (a, b) { return b.score - a.score; });
+    return all;
   }
 
   // sure: mark it. choose: ask. none: nothing found.
@@ -139,5 +193,5 @@
   }
 
   return { norm: norm, canon: canon, editDistance: editDistance, tokensFromText: tokensFromText,
-           buildIndex: buildIndex, findMatches: findMatches, decide: decide, searchItems: searchItems };
+           buildIndex: buildIndex, findMatches: findMatches, textMatches: textMatches, findAll: findAll, words: words, decide: decide, searchItems: searchItems };
 });

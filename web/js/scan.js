@@ -142,28 +142,69 @@ var Scanner = (function () {
   'use strict';
   function pass(text, acc) { return acc ? acc + '\n' + text : text; }
 
+  function rotate(src, deg) {
+    var c = document.createElement('canvas'), sw = src.width, sh = src.height, q = deg === 90 || deg === 270;
+    c.width = q ? sh : sw; c.height = q ? sw : sh;
+    var ctx = c.getContext('2d');
+    ctx.translate(c.width / 2, c.height / 2); ctx.rotate(deg * Math.PI / 180);
+    ctx.drawImage(src, -sw / 2, -sh / 2);
+    return c;
+  }
+
+  // Cut a picture into overlapping tiles, so small labels in a wide photo get read at a good size.
+  function tiles(src, nx, ny) {
+    var out = [], tw = src.width / nx, th = src.height / ny, ox = tw * 0.3, oy = th * 0.3;
+    for (var y = 0; y < ny; y++) for (var x = 0; x < nx; x++) {
+      (function (x, y) {
+        out.push(function () {
+          var sx = Math.max(0, x * tw - ox / 2), sy = Math.max(0, y * th - oy / 2);
+          var sw = Math.min(src.width - sx, tw + ox), sh = Math.min(src.height - sy, th + oy);
+          var c = document.createElement('canvas'); c.width = Math.round(sw); c.height = Math.round(sh);
+          c.getContext('2d').drawImage(src, sx, sy, sw, sh, 0, 0, c.width, c.height);
+          return c;
+        });
+      })(x, y);
+    }
+    return out;
+  }
+
   // frames: { crop: canvas, full: canvas|null }
+  // Reads every piece of text it can find. It tries the frame, the dark on light flip, the whole
+  // picture, then the picture turned upside down and on its side, until one item stands out.
   function identify(frames, index) {
-    var all = '';
-    function judge() {
-      var m = Match.findMatches(index, Match.tokensFromText(all));
+    var all = '', pool = {};
+    function judge(text) {
+      Match.findAll(index, text).forEach(function (x) {
+        var c = pool[x.item.id]; if (!c || x.score > c.score) pool[x.item.id] = x;
+      });
+      var m = Object.keys(pool).map(function (k) { return pool[k]; });
+      m.sort(function (a, b) { return b.score - a.score; });
       return { decision: Match.decide(m), matches: m };
     }
-    return OCR.read(frames.crop, false).then(function (t1) {
-      all = pass(t1, all);
-      var j = judge();
-      if (j.decision.type === 'sure') return { j: j, text: all };
-      return OCR.read(frames.crop, true).then(function (t2) {
-        all = pass(t2, all);
-        j = judge();
-        if (j.decision.type !== 'none' || !frames.full) return { j: j, text: all };
-        return OCR.read(frames.full, false).then(function (t3) {
-          all = pass(t3, all);
-          return { j: judge(), text: all };
-        });
+    var steps = [[frames.crop, false]];
+    steps.push([frames.crop, true]);
+    if (frames.full) steps.push([frames.full, false]);
+    var big = frames.full || frames.crop;
+    steps.push([function () { return rotate(frames.crop, 180); }, false]);
+    tiles(big, 3, 3).forEach(function (t) { steps.push([t, false]); });
+    steps.push([function () { return rotate(big, 180); }, false]);
+    steps.push([function () { return rotate(big, 90); }, false]);
+    steps.push([function () { return rotate(big, 270); }, false]);
+    var j = null, ix = 0;
+    function next() {
+      if (ix >= steps.length) return Promise.resolve(j);
+      var st = steps[ix++], src = typeof st[0] === 'function' ? st[0]() : st[0];
+      return OCR.read(src, st[1]).then(function (t) {
+        all = pass(t, all);
+        j = judge(t);
+        if (j.decision.type === 'sure') return j;
+        // stop early on a short list of clear candidates after the plain passes
+        if (ix >= 3 && j.decision.type === 'choose' && j.matches.length && j.matches[0].score >= 90) return j;
+        return next();
       });
-    }).then(function (r) {
-      return { decision: r.j.decision, matches: r.j.matches, text: r.text };
+    }
+    return next().then(function (r) {
+      return { decision: r.decision, matches: r.matches, text: all };
     });
   }
 

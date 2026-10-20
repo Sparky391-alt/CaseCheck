@@ -797,6 +797,7 @@ function alreadyDone(item) { return P.project.mode === 'in' ? item.status !== 'w
 
 function onScan(res, frames, auto) {
   var d = res.decision, thumb = makeThumb(frames.full || frames.crop);
+  S.readAs = d.type === 'sure' && res.matches[0] ? res.matches[0].token : '';
   if (d.type === 'sure') {
     if (S && S.inside) { if (!auto) { feedback('ok'); openInside(d.item); } return; }
     if (auto && alreadyDone(d.item)) return;
@@ -833,6 +834,7 @@ var RESULT_TEXT = {
   'ok-out-noin': ['Checked out, never checked in', true], 'dup-outd': ['Already checked out', true]
 };
 function showResult(item, kind, prev, mode) {
+  var readAs = S && S.readAs ? S.readAs : ''; if (S) S.readAs = '';
   var z = zoneInfo(item.zone), fg = textOn(z.color), t = RESULT_TEXT[kind];
   var label = t[0];
   if (kind === 'dup-in' && item.inAt) label += ' ' + fmtT(item.inAt);
@@ -862,6 +864,7 @@ function showResult(item, kind, prev, mode) {
       h('div', { class: 'sn' }, nm(item)),
       item.desc ? h('div', { class: 'ds' }, item.desc) : null,
       item.group ? h('div', { class: 'ds', style: { opacity: '.85' } }, item.group) : null,
+      readAs ? h('div', { class: 'ds', style: { opacity: '.85' } }, 'Read from the label: ' + readAs) : null,
       pinsFor(P.project, item).length ? h('button', { class: 'btn small', style: { justifySelf: 'start', marginTop: '6px' }, onclick: function () { openPlan({ zone: item.zone, kind: dropKind(item) }); } }, pinsFor(P.project, item).length > 1 ? 'Show ' + pinsFor(P.project, item).length + ' pins on plan' : 'Show on plan') : null),
     h('div', { class: 'acts' }, acts));
   openOv(el);
