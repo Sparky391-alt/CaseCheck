@@ -840,20 +840,31 @@ function showResult(item, kind, prev, mode) {
   if (kind === 'dup-in' && item.inAt) label += ' ' + fmtT(item.inAt);
   if (kind === 'dup-outd' && item.outAt) label += ' ' + fmtT(item.outAt);
   var el;
+  var canNote = kind !== 'view' && (Perms.can(mode === 'in' ? 'checkin' : 'checkout', item) || Perms.can('damage', item));
+  var curNote = item.note && item.note !== 'Not on the original list' ? item.note : '';
+  var ta = h('textarea', { class: 'resnote', rows: 3, placeholder: 'Type a note for this item', value: curNote, hidden: curNote ? null : true, 'aria-label': 'Note' });
+  var nb = h('button', { class: 'btn ghost small notebtn', onclick: function () { ta.hidden = false; nb.hidden = true; ta.focus(); } }, icon('pencil'), curNote ? 'Edit note' : 'Add note');
+  function saveNote() {
+    if (!canNote) return;
+    var v = ta.value.trim();
+    if (v !== curNote) { curNote = v; item.note = v; saveItem(item); toast(v ? 'Note saved' : 'Note removed'); }
+  }
+  function done() { saveNote(); closeOv(el); }
+  ta.addEventListener('change', saveNote);
   var undo = h('button', { class: 'btn', onclick: async function () {
     item.status = prev.status; item.inAt = prev.inAt; item.outAt = prev.outAt;
-    await saveItem(item); closeOv(el); refreshView(); toast('Undone');
+    await saveItem(item); done(); refreshView(); toast('Undone');
   } }, kind.indexOf('ok') === 0 ? 'Undo' : 'Close');
   var acts = [undo];
   if (kind === 'view') {
-    acts = [h('button', { class: 'btn', onclick: function () { closeOv(el); } }, 'Close')];
+    acts = [h('button', { class: 'btn', onclick: done }, 'Close')];
   } else if (kind === 'dup-out') {
-    acts = [h('button', { class: 'btn', onclick: function () { closeOv(el); } }, 'Close'),
+    acts = [h('button', { class: 'btn', onclick: done }, 'Close'),
       h('button', { class: 'btn', onclick: async function () {
-        item.status = 'in'; item.inAt = Date.now(); item.outAt = null; await saveItem(item); closeOv(el); refreshView(); toast('Checked in again');
+        item.status = 'in'; item.inAt = Date.now(); item.outAt = null; await saveItem(item); done(); refreshView(); toast('Checked in again');
       } }, 'Check in again')];
   } else {
-    acts.push(h('button', { class: 'btn', onclick: function () { closeOv(el); } }, 'Next'));
+    acts.push(h('button', { class: 'btn', onclick: done }, 'Next'));
   }
   el = h('div', { class: 'result', style: { background: z.color, color: fg } },
     h('span', { class: 'state' + (t[1] ? ' warn' : '') }, label),
@@ -866,6 +877,7 @@ function showResult(item, kind, prev, mode) {
       item.group ? h('div', { class: 'ds', style: { opacity: '.85' } }, item.group) : null,
       readAs ? h('div', { class: 'ds', style: { opacity: '.85' } }, 'Read from the label: ' + readAs) : null,
       pinsFor(P.project, item).length ? h('button', { class: 'btn small', style: { justifySelf: 'start', marginTop: '6px' }, onclick: function () { openPlan({ zone: item.zone, kind: dropKind(item) }); } }, pinsFor(P.project, item).length > 1 ? 'Show ' + pinsFor(P.project, item).length + ' pins on plan' : 'Show on plan') : null),
+    canNote ? h('div', { class: 'notewrap' }, nb, ta) : null,
     h('div', { class: 'acts' }, acts));
   openOv(el);
 }
