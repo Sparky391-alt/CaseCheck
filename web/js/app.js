@@ -933,7 +933,7 @@ function itemRow(it, onclick) {
     h('div', { class: 'strip', style: { background: z.color } }),
     h('div', { style: { minWidth: 0 } },
       h('div', { class: 'sn' }, nm(it)),
-      it.serial && it.desc ? h('div', { class: 'ds' }, it.desc) : (bulk(it) ? h('div', { class: 'ds' }, '' + it.qty + ' pieces, count by hand') : (!it.serial ? h('div', { class: 'ds' }, 'No label') : null)),
+      it.serial && it.desc ? h('div', { class: 'ds' }, it.desc) : (bulk(it) ? h('div', { class: 'ds' }, '' + it.qty + ' pieces, no label') : (!it.serial ? h('div', { class: 'ds' }, 'No label') : null)),
       h('div', { class: 'meta' }, zoneChip(it.zone), it.group ? h('span', null, it.group) : null)),
     h('div', { class: 'rt' }, statusBadge(it), it.unlisted ? h('span', { class: 'badge unl' }, 'Unlisted') : null, when ? h('span', null, when) : null));
 }

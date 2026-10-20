@@ -104,7 +104,7 @@ h1, h2, h3 { margin: 0; font-family: var(--display); font-weight: 700; letter-sp
 .empty h2 { font-size: 30px; color: var(--ink); }
 
 /* chips and badges */
-.chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; }
+.chips { flex: none; min-height: 42px; display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; }
 .chip { flex: none; min-height: 38px; padding: 0 14px; border-radius: 99px; border: 1.5px solid var(--line); background: var(--panel2); font: 600 15px/1 var(--body); }
 .chip[aria-pressed="true"] { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); }
 .zone { display: inline-flex; align-items: center; min-height: 26px; padding: 0 10px; border-radius: 6px; font: 700 15px/1 var(--display); letter-spacing: .06em; text-transform: uppercase; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
