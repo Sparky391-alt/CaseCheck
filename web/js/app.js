@@ -94,7 +94,7 @@ function updBanner() {
 }
 function verLine() {
   var w = window.CC_WEB, extra = w && w.v > w.builtin ? ' · updated ' + new Date(w.v * 1000).toISOString().slice(0, 10) : '';
-  return 'Case Check 1.7' + extra + ' · works offline';
+  return 'Case Check 1.8' + extra + ' · works offline';
 }
 function homeScreen() {
   var list = h('div', { class: 'scroll' });
@@ -125,7 +125,7 @@ function homeScreen() {
       h('button', { class: 'btn small', onclick: cycleTheme }, 'Theme: ' + themeName())));
     list.appendChild(h('div', { class: 'row', style: { justifyContent: 'center' } }, h('button', { class: 'btn small', onclick: problemSheet }, 'Problem log')));
     list.appendChild(h('div', { class: 'row', style: { justifyContent: 'center' } }, h('button', { class: 'btn small', onclick: checkUpdates }, 'Check for updates')));
-    list.appendChild(h('div', { class: 'ver' }, verLine()));
+    list.append(h('div', { class: 'ver' }, verLine()), h('div', { class: 'ver credit' }, 'Created and operated by M Barnard'));
   });
   return h('div', { class: 'screen' }, topbar('Case Check', 'Flight cases and pallets'), list);
 }
@@ -183,7 +183,7 @@ function teamSheet() {
         h('div', { class: 'row' },
           h('button', { class: 'btn grow', onclick: async function () { await Sync.cycle(true); draw(); } }, 'Sync now'),
           h('button', { class: 'btn grow', onclick: function () { shareText('Case Check team code', 'Join my Case Check project "' + p.name + '". In the app tap Join a team with a code and type ' + p.team.code); } }, 'Send code')),
-        h('div', { class: 'mute', style: { fontSize: '14px' } }, 'Photos and the site plan stay on each phone.'),
+        h('div', { class: 'mute', style: { fontSize: '14px' } }, 'Photos and the site plan are shared with the team.'),
         h('button', { class: 'btn danger block', onclick: async function () {
           if (!(await confirmDlg({ title: 'Stop syncing?', body: 'This phone keeps its copy. It stops sending and receiving changes.', ok: 'Stop', danger: true }))) return;
           p.team = null; await Store.putProject(p); draw(); refreshView();
@@ -823,11 +823,11 @@ function showResult(item, kind, prev, mode) {
     h('span', { class: 'state' + (t[1] ? ' warn' : '') }, label),
     h('div', { class: 'goto' }, mode === 'in' ? 'Take to' : 'Collect from'),
     h('div', { class: 'zonebig', style: { fontSize: fitSize(item.zone || 'No zone') } }, item.zone || 'No zone'),
+    h('div', { class: 'locbig' }, dropKind(item)),
     h('div', { class: 'who' },
       h('div', { class: 'sn' }, nm(item)),
       item.desc ? h('div', { class: 'ds' }, item.desc) : null,
       item.group ? h('div', { class: 'ds', style: { opacity: '.85' } }, item.group) : null,
-      h('div', { class: 'ds', style: { opacity: '.95', fontWeight: '600' } }, dropKind(item)),
       pinsFor(P.project, item).length ? h('button', { class: 'btn small', style: { justifySelf: 'start', marginTop: '6px' }, onclick: function () { openPlan({ zone: item.zone, kind: dropKind(item) }); } }, pinsFor(P.project, item).length > 1 ? 'Show ' + pinsFor(P.project, item).length + ' pins on plan' : 'Show on plan') : null),
     h('div', { class: 'acts' }, acts));
   openOv(el);
@@ -1137,7 +1137,7 @@ function menuView() {
         if (!(await confirmDlg({ title: 'Delete "' + p.name + '"?', body: 'The list, check ins and photos are removed from this phone.', ok: 'Delete', danger: true }))) return;
         if (p.plan) await planClear(); await Store.deleteProject(p.id); P = null; Nav.stack = [{ t: 'screen', route: { s: 'home' } }]; render();
       }, 'danger')),
-    h('div', { class: 'ver' }, verLine()));
+    h('div', { class: 'ver' }, verLine()), h('div', { class: 'ver credit' }, 'Created and operated by M Barnard'));
 }
 /* ===================== report ===================== */
 function loadJsPdf() {

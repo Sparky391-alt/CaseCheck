@@ -275,3 +275,7 @@ table.prev th { font: 700 13px/1 var(--display); letter-spacing: .08em; text-tra
 .cmpact .btn.good { background: var(--good); border-color: var(--good); color: #fff; font-size: 24px; min-height: 58px; }
 .cmpact .btn.bad { background: var(--bad); border-color: var(--bad); color: #fff; font-size: 24px; min-height: 58px; }
 .note.good { padding: 10px 12px; border-radius: 10px; background: var(--good-bg); color: var(--good); font-weight: 600; }
+
+.credit { padding-top: 0; padding-bottom: 14px; font-weight: 600; }
+
+.result .locbig { align-self: flex-start; margin-bottom: 18px; padding: 10px 16px 8px; border: 3px solid currentColor; border-radius: 10px; background: rgba(0,0,0,.82); color: #fff; font: 700 34px/1.05 var(--display); letter-spacing: .03em; text-transform: uppercase; overflow-wrap: anywhere; }

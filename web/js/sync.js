@@ -30,7 +30,7 @@ var Sync = (function () {
       }, function (err) { if (t) clearTimeout(t); throw new Error('No connection (' + (err && err.message ? err.message : 'failed') + ')'); });
   }
 
-  function metaOf(p) { return { name: p.name, zones: p.zones, zoneMeta: p.zoneMeta || {}, org: p.org || [], cols: p.cols || [], docs: p.docs || [], pts: planPts(p) }; }
+  function metaOf(p) { return { name: p.name, zones: p.zones, zoneMeta: p.zoneMeta || {}, org: p.org || [], cols: p.cols || [], docs: p.docs || [], pts: planPts(p), plan: planPageList(p), clr: (p.plan && p.plan.clr) || 0 }; }
   function strip(it) { var d = {}; Object.keys(it).forEach(function (k) { if (k !== 'pid' && k !== 's') d[k] = it[k]; }); return d; }
   function dirty(items) { return items.filter(function (i) { return (i.u || 0) > (i.s || 0); }); }
 
@@ -41,6 +41,20 @@ var Sync = (function () {
     p.name = m.name || p.name; p.zoneMeta = m.zoneMeta || p.zoneMeta; p.org = m.org || p.org; p.cols = m.cols || p.cols; p.docs = m.docs || p.docs;
     if (m.zones) p.zones = m.zones;
     if (m.pts && m.pts.length) { p.plan = p.plan || { pages: [], pins: {}, points: [] }; p.plan.points = m.pts; }
+    if (m.clr || (m.plan && m.plan.length)) {
+      p.plan = p.plan || { pages: [], pins: {}, points: [] };
+      var pl = p.plan;
+      // Someone removed the plan pages: drop ours too, once.
+      if ((m.clr || 0) > (pl.clr || 0)) {
+        pl.pages.forEach(function (g, i) { Store.deletePhoto(g.id ? planPageKey(g) : planKey(p.id, i)); });
+        pl.pages = []; pl.clr = m.clr;
+      }
+      // Pages are joined by id so nobody loses a page.
+      (m.plan || []).forEach(function (g) {
+        var have = pl.pages.filter(function (x) { return x.id === g.id; })[0];
+        if (have) { have.name = g.name; have.w = g.w; have.h = g.h; } else pl.pages.push({ id: g.id, name: g.name, w: g.w, h: g.h });
+      });
+    }
     p.team.metaU = row.updated_at;
   }
 
@@ -126,6 +140,19 @@ var Sync = (function () {
     return rows && rows[0] && rows[0].data ? fromB64(rows[0].data) : null;
   }
 
+  // Get the plan pictures other phones sent, so the plan works without a connection.
+  async function fetchPlanPages(p) {
+    var pages = (p.plan && p.plan.pages) || [], got = 0;
+    for (var i = 0; i < pages.length && got < 2; i++) {
+      if (!pages[i].id) continue;
+      var key = planPageKey(pages[i]);
+      if (await Store.getPhoto(key)) continue;
+      var blob = await fetchPhoto(p.team.code, key);
+      if (blob) { await Store.putPhoto(key, blob); got++; }
+    }
+    return got;
+  }
+
   // One round: take what others did, then send what we did.
   async function cycle(force) {
     var p = window.P && P.project;
@@ -133,9 +160,11 @@ var Sync = (function () {
     if (!force && document.hidden) return;
     st.busy = true;
     try {
+      if (typeof planMigrate === 'function') await planMigrate(p);
       var items = P.items, res = await pullAll(p, items);
       var out = await pushAll(p, items);
       try { st.photosLeft = await sendPhotos(p.team.code); } catch (pe) { st.photosLeft = -1; Diag.log('PHOTO ' + (pe.message || pe)); }
+      try { await fetchPlanPages(p); } catch (pe) { Diag.log('PLAN ' + (pe.message || pe)); }
       await quietly(async function () {
         var touched = res.changed.concat(out.items);
         if (touched.length) await Store.putItems(touched);
@@ -185,6 +214,7 @@ var Sync = (function () {
     var m = rows[0].project || {};
     var p = { id: Store.uid(), name: m.name || 'Team project', createdAt: Date.now(), updatedAt: Date.now(), mode: 'in', zones: m.zones || [], cols: m.cols || [], docs: m.docs || [],
               zoneMeta: m.zoneMeta || {}, org: m.org || [], team: { code: code, pulled: 0, metaPushed: 0, metaU: rows[0].updated_at } };
+    applyMeta(p, rows[0]);
     var items = [];
     var r = await pullAll(p, items);
     p.team.metaPushed = Date.now();

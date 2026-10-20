@@ -2,6 +2,30 @@
 'use strict';
 
 function planKey(pid, i) { return 'plan:' + pid + ':' + i; }
+// Pages have their own id so every phone in a team uses the same key for the same picture.
+function planPageKey(pg) { return 'planpg:' + pg.id; }
+function planPageList(p) { return ((p && p.plan && p.plan.pages) || []).filter(function (g) { return g.id; }).map(function (g) { return { id: g.id, name: g.name, w: g.w, h: g.h }; }); }
+// Older pages had no id. Give them one and queue the picture for the team.
+async function planMigrate(p) {
+  var pages = (p && p.plan && p.plan.pages) || [], changed = false;
+  for (var i = 0; i < pages.length; i++) {
+    if (pages[i].id) continue;
+    var rec = await Store.getPhoto(planKey(p.id, i));
+    pages[i].id = uid6(); changed = true;
+    if (rec && rec.blob) { await Store.putPhoto(planPageKey(pages[i]), rec.blob, true); await Store.deletePhoto(planKey(p.id, i)); }
+  }
+  if (changed) await Store.putProject(p);
+}
+// Keep a plan picture small enough to send to the team over a phone connection.
+async function planShrink(blob, w, h) {
+  if (blob.size <= 2.5e6 && Math.max(w, h) <= 3200) return { blob: blob, w: w, h: h };
+  var bmp = await createImageBitmap(blob), sc = Math.min(1, 3000 / Math.max(bmp.width, bmp.height));
+  var cv = document.createElement('canvas'); cv.width = Math.round(bmp.width * sc); cv.height = Math.round(bmp.height * sc);
+  var cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height); cx.drawImage(bmp, 0, 0, cv.width, cv.height);
+  var out = await new Promise(function (r) { cv.toBlob(r, 'image/jpeg', 0.82); });
+  var res = { blob: out, w: cv.width, h: cv.height }; cv.width = cv.height = 1;
+  return res;
+}
 
 /* Drop offs. Equipment goes to one of two places on site. Each zone can have several pins, each pin tagged with its drop off. */
 var DROP_KINDS = ['Screens and Speakers', 'AV room'];
@@ -69,17 +93,19 @@ async function planAdd(files) {
   for (var f = 0; f < files.length; f++) {
     var pages = await planPagesFrom(files[f]);
     for (var k = 0; k < pages.length; k++) {
-      var idx = p.plan.pages.length;
-      await Store.putPhoto(planKey(p.id, idx), pages[k].blob);
-      p.plan.pages.push({ name: pages[k].name, w: pages[k].w, h: pages[k].h });
+      var sm = await planShrink(pages[k].blob, pages[k].w, pages[k].h);
+      var pg = { id: uid6(), name: pages[k].name, w: sm.w, h: sm.h };
+      await Store.putPhoto(planPageKey(pg), sm.blob, true);
+      p.plan.pages.push(pg);
     }
   }
   await Store.putProject(p);
 }
 async function planClear() {
   var p = P.project;
-  if (p.plan) for (var i = 0; i < p.plan.pages.length; i++) await Store.deletePhoto(planKey(p.id, i));
-  var keep = planPts(p); p.plan = keep.length ? { pages: [], pins: {}, points: keep } : null; await Store.putProject(p);
+  var clr = Date.now();
+  if (p.plan) for (var i = 0; i < p.plan.pages.length; i++) await Store.deletePhoto(p.plan.pages[i].id ? planPageKey(p.plan.pages[i]) : planKey(p.id, i));
+  var keep = planPts(p); p.plan = keep.length || p.team ? { pages: [], pins: {}, points: keep, clr: clr } : null; await Store.putProject(p);
 }
 
 // opts: { zone, kind } focuses the pins for that zone and drop off.
@@ -137,8 +163,12 @@ function openPlan(opts) {
   async function loadPage(focus) {
     var pages = (p.plan && p.plan.pages) || [];
     if (!pages.length) { draw(); return; }
-    var rec = await Store.getPhoto(planKey(p.id, page));
-    if (!rec || !rec.blob) { toast('Plan page missing'); return; }
+    var rec = await Store.getPhoto(planPageKey(pages[page]));
+    if (!rec && p.team && window.Sync) {
+      toast('Loading the plan from the team');
+      try { var got = await Sync.fetchPhoto(p.team.code, planPageKey(pages[page])); if (got) { await Store.putPhoto(planPageKey(pages[page]), got); rec = { blob: got }; } } catch (e) { /* offline */ }
+    }
+    if (!rec || !rec.blob) { toast('The plan page is not on this phone yet. Connect and try again.'); return; }
     if (url) URL.revokeObjectURL(url);
     url = URL.createObjectURL(rec.blob);
     V.iw = pages[page].w; V.ih = pages[page].h;
