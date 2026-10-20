@@ -30,7 +30,7 @@ var Sync = (function () {
       }, function (err) { if (t) clearTimeout(t); throw new Error('No connection (' + (err && err.message ? err.message : 'failed') + ')'); });
   }
 
-  function metaOf(p) { return { name: p.name, zones: p.zones, zoneMeta: p.zoneMeta || {}, org: p.org || [], cols: p.cols || [], docs: p.docs || [], pts: planPts(p), plan: planPageList(p), clr: (p.plan && p.plan.clr) || 0 }; }
+  function metaOf(p) { return { name: p.name, zones: p.zones, zoneMeta: p.zoneMeta || {}, org: p.org || [], cols: p.cols || [], docs: p.docs || [], pts: planPts(p), plan: planPageList(p), clr: (p.plan && p.plan.clr) || 0, pol: p.pol || null }; }
   function strip(it) { var d = {}; Object.keys(it).forEach(function (k) { if (k !== 'pid' && k !== 's') d[k] = it[k]; }); return d; }
   function dirty(items) { return items.filter(function (i) { return (i.u || 0) > (i.s || 0); }); }
 
@@ -55,6 +55,7 @@ var Sync = (function () {
         if (have) { have.name = g.name; have.w = g.w; have.h = g.h; } else pl.pages.push({ id: g.id, name: g.name, w: g.w, h: g.h });
       });
     }
+    if (m.pol) p.pol = m.pol;
     p.team.metaU = row.updated_at;
   }
 
@@ -160,6 +161,7 @@ var Sync = (function () {
     if (!force && document.hidden) return;
     st.busy = true;
     try {
+      if (window.Perms) { try { if (!(await Perms.sync(p, api))) { st.err = 'Blocked by the admin'; st.busy = false; updateLabel(); return; } } catch (pe) { Diag.log('DEV ' + (pe.message || pe)); } }
       if (typeof planMigrate === 'function') await planMigrate(p);
       var items = P.items, res = await pullAll(p, items);
       var out = await pushAll(p, items);
@@ -235,5 +237,5 @@ var Sync = (function () {
     window.addEventListener('online', function () { cycle(true); });
   }
 
-  return { cycle: cycle, create: create, join: join, label: label, start: start, state: st, clean: clean, dirty: dirty, cfg: CFG, fetchPhoto: fetchPhoto };
+  return { cycle: cycle, create: create, join: join, label: label, start: start, state: st, clean: clean, dirty: dirty, cfg: CFG, fetchPhoto: fetchPhoto, api: api };
 })();

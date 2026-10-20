@@ -290,14 +290,14 @@ function openPlan(opts) {
         pageLbl,
         h('button', { class: 'iconbtn', 'aria-label': 'Next page', style: { transform: 'scaleX(-1)' }, onclick: function () { page = (page + 1) % pages.length; loadPage(); } }, icon('back')));
     }
-    if (pages.length) right.append(h('button', { class: 'btn small', 'aria-pressed': String(editing), onclick: function () { editing = !editing; focusIds = {}; selPt = null; draw(); } }, editing ? 'Done' : 'Pins'));
+    if (pages.length && !opts.ro) right.append(h('button', { class: 'btn small', 'aria-pressed': String(editing), onclick: function () { editing = !editing; focusIds = {}; selPt = null; draw(); } }, editing ? 'Done' : 'Pins'));
     var top = h('div', { class: 'top' }, h('button', { class: 'iconbtn', 'aria-label': 'Close', onclick: function () { closeOv(el); } }, icon('x')), h('div', { class: 'grow' }, titleEl), right);
     el.replaceChildren(top);
     if (!pages.length) {
       el.append(h('div', { class: 'planempty' },
         h('h2', { style: { fontSize: '30px' } }, 'Add the site plan'),
         h('p', { class: 'mute', style: { margin: 0, maxWidth: '30ch' } }, 'Choose the layout drawing, as a PDF or a picture. Then pin each zone where it goes.'),
-        h('button', { class: 'btn primary', onclick: function () { input.click(); } }, 'Choose plan')), input);
+        opts.ro ? null : h('button', { class: 'btn primary', onclick: function () { input.click(); } }, 'Choose plan')), input);
       return;
     }
     el.append(wrap, foot, input);

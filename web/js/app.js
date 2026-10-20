@@ -103,7 +103,6 @@ function homeScreen() {
     return Promise.all(ps.map(function (p) { return Store.getItems(p.id).then(function (its) { return { p: p, c: counts(its) }; }); }));
   }).then(function (rows) {
     list.replaceChildren();
-    list.appendChild(h('div', { class: 'logo', role: 'img', 'aria-label': 'Case Check' }));
     var ub = updBanner(); if (ub) list.appendChild(ub);
     list.appendChild(h('button', { class: 'btn primary block', onclick: function () { startImport(null); } }, icon('plus'), 'New project'));
     list.appendChild(h('button', { class: 'btn block', onclick: joinSheet }, 'Join a team with a code'));
@@ -122,13 +121,13 @@ function homeScreen() {
         h('div', { class: 'stats', style: { marginTop: '10px' } },
           h('span', null, h('b', null, c.wait), ' waiting'), h('span', null, h('b', null, c.in), ' in'), h('span', null, h('b', null, c.out), ' out'))));
     });
-    list.appendChild(h('div', { class: 'row', style: { justifyContent: 'center', marginTop: '8px' } },
-      h('button', { class: 'btn small', onclick: cycleTheme }, 'Theme: ' + themeName())));
-    list.appendChild(h('div', { class: 'row', style: { justifyContent: 'center' } }, h('button', { class: 'btn small', onclick: problemSheet }, 'Problem log')));
-    list.appendChild(h('div', { class: 'row', style: { justifyContent: 'center' } }, h('button', { class: 'btn small', onclick: checkUpdates }, 'Check for updates')));
-    list.append(h('div', { class: 'ver' }, verLine()), h('div', { class: 'ver credit' }, 'Created and operated by M Barnard'));
+    list.appendChild(h('div', { class: 'homelinks' },
+      h('button', { class: 'linkbtn', onclick: cycleTheme }, 'Theme: ' + themeName()),
+      h('button', { class: 'linkbtn', onclick: problemSheet }, 'Problem log'),
+      h('button', { class: 'linkbtn', onclick: checkUpdates }, 'Updates')));
+    list.appendChild(h('div', { class: 'homefoot' }, h('div', null, verLine()), h('div', null, h('b', null, 'Created and operated by M Barnard'))));
   });
-  return h('div', { class: 'screen' }, topbar('Case Check', 'Flight cases and pallets'), list);
+  return h('div', { class: 'screen' }, h('div', { class: 'top' }, h('div', { class: 'brandmark', role: 'img', 'aria-label': 'Case Check' }), h('div', { class: 'grow' }, h('h1', null, 'Case Check'), h('div', { class: 'sub', id: 'subline' }, 'Flight cases and pallets'))), list);
 }
 async function checkUpdates() {
   if (!window.Upd) return;
@@ -185,6 +184,7 @@ function teamSheet() {
           h('button', { class: 'btn grow', onclick: async function () { await Sync.cycle(true); draw(); } }, 'Sync now'),
           h('button', { class: 'btn grow', onclick: function () { shareText('Case Check team code', 'Join my Case Check project "' + p.name + '". In the app tap Join a team with a code and type ' + p.team.code); } }, 'Send code')),
         h('div', { class: 'mute', style: { fontSize: '14px' } }, 'Photos and the site plan are shared with the team.'),
+        h('div', { class: 'note' }, Perms.describe()),
         h('button', { class: 'btn danger block', onclick: async function () {
           if (!(await confirmDlg({ title: 'Stop syncing?', body: 'This phone keeps its copy. It stops sending and receiving changes.', ok: 'Stop', danger: true }))) return;
           p.team = null; await Store.putProject(p); draw(); refreshView();
@@ -513,7 +513,7 @@ function impPdf() {
       checks.push(h('div', { class: 'note' }, g.bom ? 'Only the bill of materials was added. No packing list to check against.' : 'Only the packing list was added. No bill of materials to check against.'));
     }
     if (bare) checks.push(h('div', { class: 'note', style: { marginTop: '8px', background: 'var(--panel2)', color: 'var(--ink2)', border: '1px solid var(--line)', fontWeight: '500' } },
-      bare + ' lines have no label, such as cables and drums. You count them by hand in the List tab.'));
+      bare + ' lines have no label, such as cables, drums and pallets. Use No label on the Scan tab and take a photo of each one.'));
     parts.push(h('div', { class: 'card', style: { display: 'grid', gap: '10px' } },
       h('label', { class: 'field' }, h('span', null, 'Zone for ' + (g.lang || g.code)),
         h('input', { type: 'text', value: g.zone, oninput: function (e) { g.zone = e.target.value.trim(); } })),
@@ -677,6 +677,7 @@ function scanView() {
   var strip = h('div', { class: 'strip2' }, S.stats,
     h('div', { class: 'row' },
       h('button', { class: 'btn small', 'aria-label': 'Use a photo from the gallery', onclick: function () { S.fileIn.click(); } }, icon('image')),
+      h('button', { class: 'btn small', onclick: function () { noLabelSheet(); } }, icon('scan'), 'No label'),
       h('button', { class: 'btn small', onclick: function () { findSheet({}); } }, icon('keys'), 'Type')));
   refreshStats();
   return h('div', { class: 'scanwrap' }, seg, cam, strip, S.fileIn);
@@ -812,7 +813,9 @@ function showResult(item, kind, prev, mode) {
     await saveItem(item); closeOv(el); refreshView(); toast('Undone');
   } }, kind.indexOf('ok') === 0 ? 'Undo' : 'Close');
   var acts = [undo];
-  if (kind === 'dup-out') {
+  if (kind === 'view') {
+    acts = [h('button', { class: 'btn', onclick: function () { closeOv(el); } }, 'Close')];
+  } else if (kind === 'dup-out') {
     acts = [h('button', { class: 'btn', onclick: function () { closeOv(el); } }, 'Close'),
       h('button', { class: 'btn', onclick: async function () {
         item.status = 'in'; item.inAt = Date.now(); item.outAt = null; await saveItem(item); closeOv(el); refreshView(); toast('Checked in again');
@@ -843,6 +846,34 @@ function bestToken(text) {
   toks.sort(function (a, b) { return score(b) - score(a); });
   return toks.length ? toks[0].raw : '';
 }
+/* Items with no label are tracked by a photo. The photo is the label. */
+function unlabelled(it) { return !it.serial; }
+async function photoCheck(item) {
+  var mode = P.project.mode;
+  if (!Perms.can(mode === 'in' ? 'checkin' : 'checkout', item)) { applyScan(item, null); return; }
+  var blob = await Photos.shoot({ title: nm(item), hint: 'Photo of the item. The photo is its label.' });
+  if (!blob) return;
+  await Photos.save(item.id + ':' + mode, blob);
+  item.ph = item.ph || {}; item.ph[mode] = 1;
+  await saveItem(item);
+  if (bulk(item)) { refreshView(); toast('Photo saved. Count the pieces.'); itemSheet(item); }
+  else applyScan(item, null);
+}
+function noLabelSheet() {
+  var q = h('input', { type: 'search', placeholder: 'Search description or pallet', autocomplete: 'off' });
+  var list = h('div', { class: 'items' }), head = h('div', { class: 'label' }), sh;
+  function draw() {
+    var term = q.value.trim().toLowerCase();
+    var rows = P.items.filter(unlabelled).filter(function (it) { return !term || ((it.desc || '') + ' ' + (it.group || '') + ' ' + (it.zone || '')).toLowerCase().indexOf(term) >= 0; });
+    rows.sort(function (a, b) { return (alreadyDone(a) ? 1 : 0) - (alreadyDone(b) ? 1 : 0) || a.ord - b.ord; });
+    head.textContent = rows.length ? rows.length + ' with no label. The ones still to do come first.' : (term ? 'Nothing matches' : 'Every item has a label.');
+    list.replaceChildren.apply(list, rows.slice(0, 80).map(function (it) { return itemRow(it, function () { closeOv(sh.el); photoCheck(it); }); }));
+  }
+  q.addEventListener('input', draw);
+  sh = sheet('Item with no label', [h('p', { style: { margin: 0, color: 'var(--ink2)' } }, 'Pick the item, then take a photo of it. The photo shows the team what you checked.'), q, head, list]);
+  draw();
+}
+
 function findSheet(opts) {
   var cands = (opts.candidates || []).map(function (c) { return c.item; });
   var input = h('input', { type: 'search', class: 'mono', placeholder: 'Type serial or description', autocomplete: 'off', value: '' });
@@ -963,6 +994,7 @@ function itemSheet(it) {
   var sh;
   function setStatus(st) {
     return async function () {
+      if (!Perms.ok(st === 'in' ? 'checkin' : st === 'out' ? 'checkout' : 'edit', it)) return;
       if (st === 'in') { it.status = 'in'; it.inAt = it.inAt || Date.now(); it.outAt = null; if (it.status === 'in' && !it.inAt) it.inAt = Date.now(); }
       else if (st === 'out') { it.status = 'out'; it.outAt = Date.now(); }
       else { it.status = 'wait'; it.inAt = null; it.outAt = null; }
@@ -973,6 +1005,7 @@ function itemSheet(it) {
     var val = h('b', { style: { fontSize: '30px', minWidth: '3ch', textAlign: 'center', fontFamily: 'var(--display)' } }, (it[key] || 0) + ' / ' + max);
     var bump = function (d) {
       return async function () {
+        if (!Perms.ok('count', it)) return;
         it[key] = Math.max(0, Math.min(max, (it[key] || 0) + d));
         if (key === 'got' && it.gone > it.got) it.gone = it.got;
         if (it.got > 0 && !it.inAt) it.inAt = Date.now();
@@ -983,7 +1016,7 @@ function itemSheet(it) {
       h('div', { class: 'row', style: { alignItems: 'center', justifyContent: 'space-between' } },
         h('button', { class: 'btn', 'aria-label': 'One less', onclick: bump(-1) }, '-'), val,
         h('button', { class: 'btn primary', 'aria-label': 'One more', onclick: bump(1) }, '+'),
-        h('button', { class: 'btn small', onclick: async function () { it[key] = max; if (key === 'gone') it.got = max; syncQty(it); await saveItem(it); refreshView(); drawBody(); } }, 'All')));
+        h('button', { class: 'btn small', onclick: async function () { if (!Perms.ok('count', it)) return; it[key] = max; if (key === 'gone') it.got = max; syncQty(it); await saveItem(it); refreshView(); drawBody(); } }, 'All')));
   }
   function bulkControls() {
     return h('div', { style: { display: 'grid', gap: '12px' } },
@@ -999,13 +1032,14 @@ function itemSheet(it) {
       if (p[1] !== it.serial && p[1] !== it.desc && p[1] !== it.group && p[1] !== it.alt && p[1] !== it.zone) row(p[0], p[1]);
     });
     var note = h('textarea', { rows: 2, placeholder: 'Note', value: it.note || '', style: { minHeight: '70px' } });
-    note.addEventListener('change', function () { it.note = note.value; saveItem(it); });
+    note.addEventListener('change', function () { if (!Perms.ok('edit', it)) { note.value = it.note || ''; return; } it.note = note.value; saveItem(it); });
     body.append(
       h('div', { class: 'row wrap' }, statusBadge(it), it.unlisted ? h('span', { class: 'badge unl' }, 'Not on list') : null, zoneChip(it.zone),
         h('button', { class: 'btn small', onclick: function () { pickZoneSheet(it, drawBody); } }, 'Change zone')),
       h('div', { class: 'row wrap' },
         h('button', { class: 'btn small', onclick: function () { openInside(it); } }, 'Inside check' + (it.chk && it.chk.lines && it.chk.lines.length ? ' (' + it.chk.lines.length + ')' : '')),
-        h('button', { class: 'btn small', onclick: function () { openDamage(it); } }, 'Damage' + (it.dmg && it.dmg.length ? ' (' + it.dmg.length + ')' : ''))),
+        h('button', { class: 'btn small', onclick: function () { openDamage(it); } }, 'Damage' + (it.dmg && it.dmg.length ? ' (' + it.dmg.length + ')' : '')),
+        unlabelled(it) ? h('button', { class: 'btn small', onclick: function () { closeOv(sh.el); photoCheck(it); } }, 'Photo as label') : null),
       h('div', { class: 'row wrap' }, h('span', { class: 'badge' }, 'Drop off: ' + dropKind(it) + (it.drop ? '' : ' (auto)')),
         h('button', { class: 'btn small', onclick: function () { pickDropSheet(it, drawBody); } }, 'Change drop off')),
       bulk(it) ? bulkControls() : h('div', { class: 'row' },
@@ -1014,10 +1048,10 @@ function itemSheet(it) {
         h('button', { class: 'btn small grow', onclick: setStatus('wait') }, 'Waiting')),
       kv, h('div', { class: 'field' }, h('span', null, 'Note'), note));
     ['in', 'out'].forEach(function (m) {
-      Store.getPhoto(it.id + ':' + m).then(function (r) {
-        if (!r || !r.blob) return;
-        var u = URL.createObjectURL(r.blob); urls.push(u);
-        body.append(h('div', { class: 'label' }, m === 'in' ? 'Check in photo' : 'Check out photo'), h('img', { class: 'photo', src: u, alt: 'Photo at ' + m }));
+      var key = it.id + ':' + m;
+      Photos.url(key).then(function (u) {
+        if (!u) return;
+        body.append(h('div', { class: 'label' }, m === 'in' ? 'Check in photo' : 'Check out photo'), h('img', { class: 'photo', src: u, alt: 'Photo at ' + m, onclick: function () { viewPhoto(key, m === 'in' ? 'Check in photo' : 'Check out photo'); } }));
       });
     });
   }
@@ -1116,7 +1150,8 @@ function buildCSV() {
 }
 function menuView() {
   var p = P.project;
-  var b = function (label, fn, cls) { return h('button', { class: 'btn ' + (cls || ''), onclick: fn }, label); };
+  var MENU_PERM = { 'Share report (CSV)': 'report', 'Add another document': 'manage', 'Rename project': 'manage', 'Save a backup': 'manage', 'Reset all check ins': 'manage', 'Delete project': 'manage' };
+  var b = function (label, fn, cls) { var pm = MENU_PERM[label]; return h('button', { class: 'btn ' + (cls || ''), onclick: pm ? function () { if (Perms.ok(pm)) fn(); } : fn }, label); };
   return h('div', { class: 'scroll' },
     h('div', { class: 'menu' },
       b('Report and PDF', function () { goScreen({ s: 'report' }); }, 'primary'),
