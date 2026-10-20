@@ -30,7 +30,7 @@ var Sync = (function () {
       }, function (err) { if (t) clearTimeout(t); throw new Error('No connection (' + (err && err.message ? err.message : 'failed') + ')'); });
   }
 
-  function metaOf(p) { return { name: p.name, zones: p.zones, zoneMeta: p.zoneMeta || {}, org: p.org || [], cols: p.cols || [], docs: p.docs || [], pts: planPts(p), plan: planPageList(p), clr: (p.plan && p.plan.clr) || 0, pol: p.pol || null }; }
+  function metaOf(p) { return { name: p.name, zones: p.zones, zoneMeta: p.zoneMeta || {}, org: p.org || [], cols: p.cols || [], docs: p.docs || [], pts: planPts(p), plan: planPageList(p), clr: (p.plan && p.plan.clr) || 0, pol: p.pol || null, own: p.own || null }; }
   function strip(it) { var d = {}; Object.keys(it).forEach(function (k) { if (k !== 'pid' && k !== 's') d[k] = it[k]; }); return d; }
   function dirty(items) { return items.filter(function (i) { return (i.u || 0) > (i.s || 0); }); }
 
@@ -56,6 +56,7 @@ var Sync = (function () {
       });
     }
     if (m.pol) p.pol = m.pol;
+    if (m.own) p.own = m.own;
     p.team.metaU = row.updated_at;
   }
 
@@ -192,6 +193,7 @@ var Sync = (function () {
 
   async function create(p) {
     var code, tries = 0;
+    p.own = window.Perms ? Perms.devId() : '';
     for (;;) {
       code = code6();
       try {
@@ -199,7 +201,7 @@ var Sync = (function () {
         break;
       } catch (e) { if (e.status === 409 && ++tries < 5) continue; throw e; }
     }
-    p.team = { code: code, pulled: 0, metaPushed: p.u || 0, metaU: Date.now() };
+    p.team = { code: code, pulled: 0, metaPushed: p.u || 0, metaU: Date.now(), owner: true };
     P.items.forEach(function (i) { i.s = 0; i.u = i.u || Date.now(); });
     await cycle(true);
     if (st.err) { var msg = st.err; p.team = null; await quietly(function () { return Store.putProject(p); }); throw new Error(msg); }

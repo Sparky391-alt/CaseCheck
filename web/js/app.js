@@ -169,7 +169,7 @@ function teamSheet() {
       var msg = h('div', { class: 'note', hidden: true });
       var go = h('button', { class: 'btn primary block', onclick: async function () {
         go.disabled = true; go.textContent = 'Setting up'; msg.hidden = true;
-        try { await Sync.create(p); draw(); refreshView(); }
+        try { await Sync.create(p); draw(); refreshView(); if (curScreen().route.tab === 'menu') render(); }
         catch (e) { msg.textContent = e.message; msg.hidden = false; go.disabled = false; go.textContent = 'Share with team'; Diag.log('SHARE ' + e.message); }
       } }, 'Share with team');
       body.append(h('p', { style: { margin: 0, color: 'var(--ink2)' } }, 'Everyone with the code sees the same list and the same check ins. It needs signal now and then. Without signal the app still works and sends the changes later.'), go, msg);
@@ -1157,6 +1157,7 @@ function menuView() {
       b('Report and PDF', function () { goScreen({ s: 'report' }); }, 'primary'),
       b('Team sync' + (p.team ? ' · ' + p.team.code : ''), teamSheet),
       b('Your name: ' + (Store.who() || 'not set'), nameSheet),
+      p.team && Perms.isAdmin() ? b('Phones and permissions', phonesSheet) : null,
       b('Site plan', function () { openPlan({}); }),
       b('Share report (CSV)', function () { shareText(p.name + ' report.csv', buildCSV()); }),
       b('Add another document', function () { startImport(p.id); }),
