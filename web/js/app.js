@@ -103,6 +103,7 @@ function homeScreen() {
     return Promise.all(ps.map(function (p) { return Store.getItems(p.id).then(function (its) { return { p: p, c: counts(its) }; }); }));
   }).then(function (rows) {
     list.replaceChildren();
+    list.appendChild(h('div', { class: 'logo', role: 'img', 'aria-label': 'Case Check' }));
     var ub = updBanner(); if (ub) list.appendChild(ub);
     list.appendChild(h('button', { class: 'btn primary block', onclick: function () { startImport(null); } }, icon('plus'), 'New project'));
     list.appendChild(h('button', { class: 'btn block', onclick: joinSheet }, 'Join a team with a code'));
